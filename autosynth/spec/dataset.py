@@ -1,7 +1,7 @@
 from typing import Dict, List
 from transformers import AutoTokenizer, DataCollatorWithFlattening
 from torch.utils.data import Dataset
-from src.spec.serialize import serialise_messages
+from autosynth.spec.serialize import serialise_messages
 from spec.tokens import MEM_TOKENS, SPECIAL_TOKENS
 
 import torch
