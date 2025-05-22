@@ -6,11 +6,11 @@ from trl import SFTTrainer  # <-- you're using HuggingFace TRL, not Unsloth's in
 from cut_cross_entropy.transformers import cce_patch
 
 class MMSWeightedLossTrainer(SFTTrainer):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    # def __init__(self, *args, **kwargs):
+    #     super().__init__(*args, **kwargs)
 
-        # Patch the model ONCE during trainer setup
-        self.model = cce_patch(self.model, reduction="none")
+    #     # Patch the model ONCE during trainer setup
+    #     self.model = cce_patch(self.model, reduction="none")
 
     def compute_loss(self, model: AutoModelForCausalLM, inputs: Dict, return_outputs=False):
         outputs = model(
