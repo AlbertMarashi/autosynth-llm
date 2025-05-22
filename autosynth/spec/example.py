@@ -68,38 +68,38 @@ conversations = [
     ]
 ]
 
-print(conversations)
+# print(conversations)
 
 
-from transformers import AutoTokenizer
+# from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3-0324")
-num_new_tokens = tokenizer.add_special_tokens({'additional_special_tokens': list(SPECIAL_TOKENS.values())})
+# tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3-0324")
+# num_new_tokens = tokenizer.add_special_tokens({'additional_special_tokens': list(SPECIAL_TOKENS.values())})
 
-# Create dataset
-dataset = CustomDataset(conversations, tokenizer, max_length=128)
+# # Create dataset
+# dataset = CustomDataset(conversations, tokenizer, max_length=128)
 
-example = dataset[0]
+# example = dataset[0]
 
-def display_token_table(input_ids: torch.Tensor, loss_multiplier: torch.Tensor, tokenizer: Any):
-    """
-    Display a table with columns: token id, text of that token, score.
-    """
-    print("\nToken Table")
-    print("-" * 50)
-    print(f"{'Token ID':<10} {'Text':<20} {'Score':<10}")
-    print("-" * 50)
+# def display_token_table(input_ids: torch.Tensor, loss_multiplier: torch.Tensor, tokenizer: Any):
+#     """
+#     Display a table with columns: token id, text of that token, score.
+#     """
+#     print("\nToken Table")
+#     print("-" * 50)
+#     print(f"{'Token ID':<10} {'Text':<20} {'Score':<10}")
+#     print("-" * 50)
 
-    for i, (token_id, score) in enumerate(zip(input_ids, loss_multiplier)):
-        # Decode single token ID to text
-        text = tokenizer.decode([token_id], clean_up_tokenization_spaces=False)
-        # Escape newlines and special characters for display
-        text = text.replace("\n", "\\n").replace("\r", "\\r")
-        print(f"{token_id.item():<10} {text:<20} {score.item():<10.2f}")
+#     for i, (token_id, score) in enumerate(zip(input_ids, loss_multiplier)):
+#         # Decode single token ID to text
+#         text = tokenizer.decode([token_id], clean_up_tokenization_spaces=False)
+#         # Escape newlines and special characters for display
+#         text = text.replace("\n", "\\n").replace("\r", "\\r")
+#         print(f"{token_id.item():<10} {text:<20} {score.item():<10.2f}")
 
-    print("-" * 50)
+#     print("-" * 50)
 
 
-# display_token_table(example['input_ids'], example['loss_multiplier'], tokenizer)
+# # display_token_table(example['input_ids'], example['loss_multiplier'], tokenizer)
 
-print(example)
+# print(example)
