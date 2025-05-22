@@ -1,9 +1,8 @@
 from typing import Any, Dict, List
 from torch.utils.data import Dataset
 from src.spec.serialize import serialise_messages
-from src.spec.tok_vocab import MEM_TOKENS, SPECIAL_TOKENS
+from spec.tokens import MEM_TOKENS, SPECIAL_TOKENS
 import torch
-
 
 class CustomDataset(Dataset):
     def __init__(self, conversations: List[List[Dict]], tokenizer: Any, max_length: int):
