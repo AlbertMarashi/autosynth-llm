@@ -1,9 +1,8 @@
 import torch.nn.functional as F
 from transformers.models.auto import AutoModelForCausalLM
 from typing import Dict
-from transformers import Trainer
-from trl import SFTTrainer  # <-- you're using HuggingFace TRL, not Unsloth's internal engine
-from cut_cross_entropy.transformers import cce_patch
+from trl import SFTTrainer
+# from cut_cross_entropy.transformers import cce_patch
 
 class MMSWeightedLossTrainer(SFTTrainer):
     def compute_loss(
