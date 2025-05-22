@@ -1,9 +1,9 @@
+import torch
 from typing import Dict, List
 from transformers import AutoTokenizer, DataCollatorWithFlattening
 from torch.utils.data import Dataset
 from autosynth.spec.serialize import serialise_messages
 from autosynth.spec.tokens import MEM_TOKENS, SPECIAL_TOKENS
-import torch
 
 class CustomDataset(Dataset):
     def __init__(self, conversations: List[List[Dict]], tokenizer: AutoTokenizer):
