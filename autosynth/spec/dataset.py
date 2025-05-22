@@ -21,13 +21,13 @@ class CustomDataset(Dataset):
         }
 
 
-    def _generate_loss_mask(self, input_ids: List[int]) -> torch.Tensor:
+    def _generate_loss_mask(self, input_ids: torch.Tensor) -> torch.Tensor:
         loss_mask = torch.zeros_like(input_ids, dtype=torch.float32)
 
         current_loss_score = 0.0
         last_special_token = None
 
-        for i, token_id in enumerate(input_ids):
+        for i, token_id in enumerate(input_ids.tolist()):
             # If this is a memory token, we wanna set it's score to MEMORY_TOKEN_LOSS
             if token_id in self.mem_token_ids_set:
                 loss_mask[i] = 0
@@ -75,13 +75,13 @@ class CustomDataset(Dataset):
             return_tensors='pt'
         )
 
-        input_ids = encoding['input_ids'].squeeze(0).tolist()
+        input_ids = encoding['input_ids'].squeeze(0)
         loss_multiplier = self._generate_loss_mask(input_ids)
-        labels = input_ids.copy()
+        labels = input_ids.clone()
 
         return {
-            'input_ids': input_ids,
-            'labels': labels,
+            'input_ids': input_ids.tolist(),
+            'labels': labels.tolist(),
             'loss_multiplier': loss_multiplier,
         }
     
