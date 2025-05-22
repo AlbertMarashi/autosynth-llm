@@ -1,5 +1,7 @@
+from typing import List
 from torch import nn
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Tell unsloth to use our own custom lm head code by setting it to equal 1
 # os.environ["UNSLOTH_RETURN_LOGITS"] = "1"
@@ -221,6 +223,25 @@ class SparseLMHead(nn.Module):
             x,  # Shape: (batch_size, seq_length, embedding_dim)
             self.tied_weights
         )
+
+
+
+def apply_trainable_embeddings(model: AutoModelForCausalLM, tokenizer: AutoTokenizer, new_tokens: List[str], tie_weights: bool = False):
+    orig_emb = model.base_model.model.model.embed_tokens
+    orig_lm_head = model.base_model.model.lm_head
+
+    new_emb_weights = SparseTiedWeights(
+        weights=orig_emb.weight,
+        trainable_start_idx=len(tokenizer) - len(new_tokens)
+    )
+
+    new_emb = SparseEmbedding(new_emb_weights)
+    new_lm_head = SparseLMHead(new_emb_weights) if tie_weights else SparseLMHead(orig_lm_head.weight)
+
+    model.base_model.model.model.embed_tokens = new_emb
+    model.base_model.model.lm_head = new_lm_head
+
+    return model
 
 # # Instantiate SparseTiedWeights using original embedding weights
 # # We assume `orig_emb.weight` is the original embedding weights of the model.

@@ -1,4 +1,4 @@
-from src.spec.tok_vocab import MEM_PREFIX, SPECIAL_TOKENS
+from spec.tokens import MEM_PREFIX, SPECIAL_TOKENS
 
 def format_message(message):
     if message["role"] == "model" or message["role"] == "assistant":
