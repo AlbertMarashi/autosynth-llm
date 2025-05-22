@@ -1,13 +1,14 @@
-from typing import Any, Dict, List
+from typing import Dict, List
+from transformers import AutoTokenizer, DataCollatorWithFlattening
 from torch.utils.data import Dataset
 from src.spec.serialize import serialise_messages
 from spec.tokens import MEM_TOKENS, SPECIAL_TOKENS
+
 import torch
 
 class CustomDataset(Dataset):
-    def __init__(self, conversations: List[List[Dict]], tokenizer: Any, max_length: int):
+    def __init__(self, conversations: List[List[Dict]], tokenizer: AutoTokenizer):
         self.tokenizer = tokenizer
-        self.max_length = max_length
         self.conversations = conversations
 
         self.mem_token_ids_set = set(self.tokenizer.encode(token, add_special_tokens=False)[0] for token in MEM_TOKENS)
@@ -72,13 +73,10 @@ class CustomDataset(Dataset):
         formatted_text = serialise_messages(self.conversations[idx])
         encoding = self.tokenizer(
             formatted_text,
-            truncation=True,
-            padding='max_length',
-            max_length=self.max_length,
             return_tensors='pt'
         )
+
         input_ids = encoding['input_ids'].squeeze(0)
-        attention_mask = encoding['attention_mask'].squeeze(0)
         loss_multiplier = self._generate_loss_mask(input_ids)
         labels = input_ids.clone()
 
@@ -86,6 +84,14 @@ class CustomDataset(Dataset):
             'input_ids': input_ids,
             'labels': labels,
             'loss_multiplier': loss_multiplier,
-            'attention_mask': attention_mask
         }
     
+
+class CustomDataCollatorWithFlattening(DataCollatorWithFlattening):
+    def __call__(self, features, return_tensors=None):
+        # Call the parent class to handle standard fields
+        batch = super().__call__(features, return_tensors)
+        # Concatenate loss_multiplier for all sequences
+        loss_multiplier = torch.cat([sample["loss_multiplier"] for sample in features], dim=0)
+        batch["loss_multiplier"] = loss_multiplier
+        return batch
