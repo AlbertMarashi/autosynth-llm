@@ -2,8 +2,7 @@ from typing import Dict, List
 from transformers import AutoTokenizer, DataCollatorWithFlattening
 from torch.utils.data import Dataset
 from autosynth.spec.serialize import serialise_messages
-from spec.tokens import MEM_TOKENS, SPECIAL_TOKENS
-
+from autosynth.spec.tokens import MEM_TOKENS, SPECIAL_TOKENS
 import torch
 
 class CustomDataset(Dataset):

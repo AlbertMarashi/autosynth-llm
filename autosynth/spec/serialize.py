@@ -1,4 +1,4 @@
-from spec.tokens import MEM_PREFIX, SPECIAL_TOKENS
+from autosynth.spec.tokens import MEM_PREFIX, SPECIAL_TOKENS
 
 def format_message(message):
     if message["role"] == "model" or message["role"] == "assistant":
