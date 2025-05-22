@@ -1,4 +1,3 @@
-import torch.nn.functional as F
 from transformers.models.auto import AutoModelForCausalLM
 from typing import Dict
 from trl import SFTTrainer
