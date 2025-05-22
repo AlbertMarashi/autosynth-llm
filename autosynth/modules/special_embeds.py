@@ -235,8 +235,13 @@ def apply_trainable_embeddings(model: AutoModelForCausalLM, tokenizer: AutoToken
         trainable_start_idx=len(tokenizer) - len(new_tokens)
     )
 
+    new_lm_head_weights = new_emb_weights if tie_weights else SparseTiedWeights(
+        weights=orig_lm_head.weight,  # Shape: (vocab_size, embedding_dim)
+        trainable_start_idx=len(tokenizer) - len(new_tokens)
+    )
+
     new_emb = SparseEmbedding(new_emb_weights)
-    new_lm_head = SparseLMHead(new_emb_weights) if tie_weights else SparseLMHead(orig_lm_head.weight)
+    new_lm_head = SparseLMHead(new_emb_weights) if tie_weights else SparseLMHead(new_lm_head_weights)
 
     model.base_model.model.model.embed_tokens = new_emb
     model.base_model.model.lm_head = new_lm_head
