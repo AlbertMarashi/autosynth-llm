@@ -68,49 +68,98 @@ conversations = [
     ]
 ]
 
-print(conversations)
 
-from typing import Any
-import torch
+from autosynth.spec.thread_dataset import ThreadDataset
+from autosynth.spec.collator import PackedCollator
 from transformers import AutoTokenizer
-from autosynth.spec.dataset import CustomDataset, CustomDataCollatorWithFlattening
+import torch
+from typing import Any
 from autosynth.spec.tokens import SPECIAL_TOKENS
 
 tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3-0324")
 num_new_tokens = tokenizer.add_special_tokens({'additional_special_tokens': list(SPECIAL_TOKENS.values())})
 
-# Create dataset
-dataset = CustomDataset(conversations, tokenizer)
+dataset = ThreadDataset(conversations, tokenizer)
+# 2. Create collator with special token mapping
+collator = PackedCollator(
+    tokenizer=tokenizer,
+    max_seq_length=128_000,
+)
 
-# Create collator
-collator = CustomDataCollatorWithFlattening(tokenizer)
+batch = collator(dataset)
 
-# Get a single example from dataset
-example = dataset[0]
+print(batch)
 
-# Pass it through the collator (needs to be a list)
-batch = collator([example])
 
-# Print batch
-# print(batch)
 
-def display_token_table(input_ids: torch.Tensor, loss_multiplier: torch.Tensor, tokenizer: Any):
+def display_token_table(tokenizer: Any, input_ids: torch.Tensor, loss_multiplier: torch.Tensor):
     """
     Display a table with columns: token id, text of that token, score.
     """
     print("\nToken Table")
     print("-" * 50)
-    print(f"{'Token ID':<10} {'Text':<20} {'Score':<10}")
+    print(f"{'Token ID':<10} {'Text':<20} {'Loss Multiplier':<10}")
     print("-" * 50)
 
-    for i, (token_id, score) in enumerate(zip(input_ids, loss_multiplier)):
+    for i, token_id in enumerate(input_ids):
         # Decode single token ID to text
         text = tokenizer.decode([token_id], clean_up_tokenization_spaces=False)
         # Escape newlines and special characters for display
         text = text.replace("\n", "\\n").replace("\r", "\\r")
-        print(f"{token_id.item():<10} {text:<20} {score.item():<10.2f}")
+        print(f"{token_id:<10} {text:<20} {loss_multiplier[i]:<10.2f}")
 
     print("-" * 50)
 
 
-display_token_table(batch['input_ids'][0], batch['loss_multiplier'], tokenizer)
+display_token_table(tokenizer, batch['input_ids'][0], batch['loss_multiplier'][0])
+
+
+
+
+########
+
+
+# print(conversations)
+
+# from typing import Any
+# import torch
+# from transformers import AutoTokenizer
+# from autosynth.spec.dataset import CustomDataset, CustomDataCollatorWithFlattening
+# from autosynth.spec.tokens import SPECIAL_TOKENS
+
+
+# # Create dataset
+# dataset = CustomDataset(conversations, tokenizer)
+
+# # Create collator
+# collator = CustomDataCollatorWithFlattening(tokenizer)
+
+# # Get a single example from dataset
+# example = dataset[0]
+
+# # Pass it through the collator (needs to be a list)
+# batch = collator([example])
+
+# # Print batch
+# # print(batch)
+
+# def display_token_table(input_ids: torch.Tensor, loss_multiplier: torch.Tensor, tokenizer: Any):
+#     """
+#     Display a table with columns: token id, text of that token, score.
+#     """
+#     print("\nToken Table")
+#     print("-" * 50)
+#     print(f"{'Token ID':<10} {'Text':<20} {'Score':<10}")
+#     print("-" * 50)
+
+#     for i, (token_id, score) in enumerate(zip(input_ids, loss_multiplier)):
+#         # Decode single token ID to text
+#         text = tokenizer.decode([token_id], clean_up_tokenization_spaces=False)
+#         # Escape newlines and special characters for display
+#         text = text.replace("\n", "\\n").replace("\r", "\\r")
+#         print(f"{token_id.item():<10} {text:<20} {score.item():<10.2f}")
+
+#     print("-" * 50)
+
+
+# display_token_table(dataset[0]['input_ids'], dataset[0]['loss_multiplier'], tokenizer)
