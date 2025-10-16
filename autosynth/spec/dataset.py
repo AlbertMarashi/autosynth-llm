@@ -28,7 +28,7 @@ class CustomDataset(Dataset):
             'input_ids': input_ids.tolist(),
             'labels': labels.tolist(),
         }
-    
+
 
 class CustomDataCollatorWithFlattening(DataCollatorWithFlattening):
     def __init__(self, tokenizer, *args, mem_token_ids_set=None, tok_name_to_id=None, tok_id_to_name=None, **kwargs):
@@ -51,19 +51,16 @@ class CustomDataCollatorWithFlattening(DataCollatorWithFlattening):
                 loss_mask[i] = current_loss_score
                 continue
             loss_mask[i] = 2.0
-            if token_id == self.tok_name_to_id["FORMAT"]:
-                current_loss_score = 2.0
-            elif token_id == self.tok_name_to_id["CONTENT"]:
-                if last_special_token == self.tok_name_to_id["FORMAT"]:
-                    current_loss_score = 1.0
+            if token_id == self.tok_name_to_id["MODEL_TOKEN"]:
+                current_loss_score = 1.0
             elif token_id == self.tok_name_to_id["DEVELOPER_TOKEN"]:
-                current_loss_score = 0.3
+                current_loss_score = 0.15
             elif token_id == self.tok_name_to_id["USER_TOKEN"]:
-                current_loss_score = 0.4
+                current_loss_score = 0.5
             elif token_id == self.tok_name_to_id["CONTEXT_TOKEN"]:
-                current_loss_score = 0.3
+                current_loss_score = 0.15
             elif token_id == self.tok_name_to_id["PLATFORM_TOKEN"]:
-                current_loss_score = 0.4
+                current_loss_score = 0.15
             last_special_token = token_id
         return loss_mask
 

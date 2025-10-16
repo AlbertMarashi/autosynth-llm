@@ -11,13 +11,11 @@ conversations = [
         },
         {
             "content": "I need to check the current price of Apple stock (AAPL) using the stock_price tool, then present the information to the user.",
-            "end_turn": False,
             "format": "reasoning",
             "role": "model"
         },
         {
             "content": "{\"symbol\": \"AAPL\"}",
-            "end_turn": False,
             "format": "stock_price:json",
             "role": "model"
         },
@@ -28,9 +26,11 @@ conversations = [
         },
         {
             "content": "# Apple Inc. (AAPL)\n\nCurrent stock price: **$187.63**\n\nChange: +$1.28 (**+0.69%**)\n\nLast updated: July 15, 2025 at 16:00 UTC",
-            "end_turn": True,
             "format": "markdown",
             "role": "model"
+        },
+        {
+            "role": "end_turn"
         }
     ],
     [
@@ -44,13 +44,11 @@ conversations = [
         },
         {
             "content": "I need to check the current price of Apple stock (AAPL) using the stock_price tool, then present the information to the user.",
-            "end_turn": False,
             "format": "reasoning",
             "role": "model"
         },
         {
             "content": "{\"symbol\": \"AAPL\"}",
-            "end_turn": False,
             "format": "stock_price:json",
             "role": "model"
         },
@@ -61,45 +59,58 @@ conversations = [
         },
         {
             "content": "# Apple Inc. (AAPL)\n\nCurrent stock price: **$187.63**\n\nChange: +$1.28 (**+0.69%**)\n\nLast updated: July 15, 2025 at 16:00 UTC",
-            "end_turn": True,
             "format": "markdown",
             "role": "model"
+        },
+        {
+            "role": "end_turn"
         }
     ]
 ]
 
-# print(conversations)
+print(conversations)
+
+from typing import Any
+import torch
+from transformers import AutoTokenizer
+from autosynth.spec.dataset import CustomDataset, CustomDataCollatorWithFlattening
+from autosynth.spec.tokens import SPECIAL_TOKENS
+
+tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3-0324")
+num_new_tokens = tokenizer.add_special_tokens({'additional_special_tokens': list(SPECIAL_TOKENS.values())})
+
+# Create dataset
+dataset = CustomDataset(conversations, tokenizer)
+
+# Create collator
+collator = CustomDataCollatorWithFlattening(tokenizer)
+
+# Get a single example from dataset
+example = dataset[0]
+
+# Pass it through the collator (needs to be a list)
+batch = collator([example])
+
+# Print batch
+# print(batch)
+
+def display_token_table(input_ids: torch.Tensor, loss_multiplier: torch.Tensor, tokenizer: Any):
+    """
+    Display a table with columns: token id, text of that token, score.
+    """
+    print("\nToken Table")
+    print("-" * 50)
+    print(f"{'Token ID':<10} {'Text':<20} {'Score':<10}")
+    print("-" * 50)
+
+    for i, (token_id, score) in enumerate(zip(input_ids, loss_multiplier)):
+        # Decode single token ID to text
+        text = tokenizer.decode([token_id], clean_up_tokenization_spaces=False)
+        # Escape newlines and special characters for display
+        text = text.replace("\n", "\\n").replace("\r", "\\r")
+        print(f"{token_id.item():<10} {text:<20} {score.item():<10.2f}")
+
+    print("-" * 50)
 
 
-# from transformers import AutoTokenizer
-
-# tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3-0324")
-# num_new_tokens = tokenizer.add_special_tokens({'additional_special_tokens': list(SPECIAL_TOKENS.values())})
-
-# # Create dataset
-# dataset = CustomDataset(conversations, tokenizer, max_length=128)
-
-# example = dataset[0]
-
-# def display_token_table(input_ids: torch.Tensor, loss_multiplier: torch.Tensor, tokenizer: Any):
-#     """
-#     Display a table with columns: token id, text of that token, score.
-#     """
-#     print("\nToken Table")
-#     print("-" * 50)
-#     print(f"{'Token ID':<10} {'Text':<20} {'Score':<10}")
-#     print("-" * 50)
-
-#     for i, (token_id, score) in enumerate(zip(input_ids, loss_multiplier)):
-#         # Decode single token ID to text
-#         text = tokenizer.decode([token_id], clean_up_tokenization_spaces=False)
-#         # Escape newlines and special characters for display
-#         text = text.replace("\n", "\\n").replace("\r", "\\r")
-#         print(f"{token_id.item():<10} {text:<20} {score.item():<10.2f}")
-
-#     print("-" * 50)
-
-
-# # display_token_table(example['input_ids'], example['loss_multiplier'], tokenizer)
-
-# print(example)
+display_token_table(batch['input_ids'][0], batch['loss_multiplier'], tokenizer)

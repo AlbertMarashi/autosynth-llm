@@ -1,7 +1,6 @@
 from transformers.models.auto import AutoModelForCausalLM
 from typing import Dict
 from trl import SFTTrainer
-# from cut_cross_entropy.transformers import cce_patch
 
 class MMSWeightedLossTrainer(SFTTrainer):
     def compute_loss(
@@ -16,6 +15,9 @@ class MMSWeightedLossTrainer(SFTTrainer):
             labels=inputs["labels"],
             # Required for packed sequences
             position_ids=inputs["position_ids"],
+            # Don't use the cache during training, because
+            # it will waste memory given the fact that we're
+            # already processing everything in parallel.
             use_cache=False
         )
         per_token_loss = outputs.loss  # Shape: (total_tokens - 1,), assuming reduction='none'
@@ -23,4 +25,3 @@ class MMSWeightedLossTrainer(SFTTrainer):
         weighted_loss = per_token_loss * weights
         loss = weighted_loss.mean()
         return (loss, outputs) if return_outputs else loss
-
