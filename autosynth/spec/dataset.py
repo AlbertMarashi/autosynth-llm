@@ -68,7 +68,7 @@ class CustomDataCollatorWithFlattening(DataCollatorWithFlattening):
         batch = super().__call__(features, return_tensors)
         
         loss_multiplier = self._generate_loss_mask(batch["input_ids"][0])  # Shape: (total_tokens,)
-        
-        batch["loss_multiplier"] = loss_multiplier
+
+        batch["loss_multiplier"] = loss_multiplier.unsqueeze(0)
 
         return batch
