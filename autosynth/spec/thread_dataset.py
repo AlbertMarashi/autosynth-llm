@@ -5,13 +5,12 @@ from transformers import AutoTokenizer
 from autosynth.spec.serialize import serialise_messages
 from autosynth.spec.tokens import SPECIAL_TOKENS
 
-
 class ThreadDataset(Dataset):
     """
     Simple dataset that yields individual threads.
     Each thread is tokenized independently.
     """
-    
+
     def __init__(self, conversations: List[List[Dict]], tokenizer: AutoTokenizer):
         """
         Args:
@@ -24,8 +23,6 @@ class ThreadDataset(Dataset):
         self.tok_name_to_id = {key: tokenizer.encode(token, add_special_tokens=False)[0] for key, token in SPECIAL_TOKENS.items()}
         self.tok_id_to_name = {v: k for k, v in self.tok_name_to_id.items()}
 
-
-    
     def __len__(self) -> int:
         return len(self.conversations)
 
@@ -60,15 +57,15 @@ class ThreadDataset(Dataset):
         """
         thread = self.conversations[idx]
         text = serialise_messages(thread)
-        
+
         # Tokenize without special tokens (we'll handle them in serialise_messages)
         tokens = self.tokenizer(text, add_special_tokens=True)['input_ids']
 
         loss_multiplier = self._generate_loss_mask(tokens)
 
         return {
-            'input_ids': tokens,
-            'labels': tokens,  # Labels = inputs for causal LM
-            'loss_multiplier': loss_multiplier,
+            'input_ids': torch.tensor(tokens[:-1]),
+            'labels': torch.tensor(tokens[1:]),
+            'loss_multiplier': torch.tensor(loss_multiplier[1:]),
+            'position_ids': torch.arange(len(tokens) - 1),
         }
-
