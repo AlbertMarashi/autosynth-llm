@@ -29,25 +29,24 @@ class ThreadDataset(Dataset):
 
     def _generate_loss_mask(self, tokens_ids: List[int]) -> torch.Tensor:
         loss_mask = [1.0] * len(tokens_ids)
-        current_loss_score = 0.0
+        current_loss_score = 1.0
         last_special_token = None
 
         for i, token_id in enumerate(tokens_ids):
             if token_id not in self.tok_id_to_name:
                 loss_mask[i] = current_loss_score
                 continue
-            loss_mask[i] = 2.0
+            loss_mask[i] = 3.0
             if token_id == self.tok_name_to_id["MODEL_TOKEN"]:
-                current_loss_score = 1.0
+                current_loss_score = 2.0
             elif token_id == self.tok_name_to_id["DEVELOPER_TOKEN"]:
-                current_loss_score = 0.15
-            elif token_id == self.tok_name_to_id["USER_TOKEN"]:
                 current_loss_score = 0.5
+            elif token_id == self.tok_name_to_id["USER_TOKEN"]:
+                current_loss_score = 1.0
             elif token_id == self.tok_name_to_id["CONTEXT_TOKEN"]:
-                current_loss_score = 0.15
+                current_loss_score = 0.5
             elif token_id == self.tok_name_to_id["PLATFORM_TOKEN"]:
-                current_loss_score = 0.15
-            last_special_token = token_id
+                current_loss_score = 0.5
         return loss_mask
 
     def __getitem__(self, idx: int) -> Dict[str, List[int]]:
