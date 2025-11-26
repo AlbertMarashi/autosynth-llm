@@ -12,205 +12,49 @@ Author: Lord Albert Marashi
 """
 import torch
 import torch.nn as nn
-from typing import Optional, Tuple, List
+from typing import Optional, List
 from transformers.models.auto import AutoModelForCausalLM, AutoTokenizer
+from fused_kernel import chunked_ce_forward, chunked_ce_backward
 
-
-# =============================================================================
-# CORE FUSED OPERATIONS
-# =============================================================================
-
-def chunked_ce_forward(
-    h: torch.Tensor,            # [N, D] hidden states
-    W: torch.Tensor,            # [V, D] weight matrix (NOT transposed)
-    labels: torch.Tensor,       # [N] target indices
-    loss_weights: torch.Tensor, # [N] per-token weights
-    ignore_index: int = -100,
-    V_CHUNK: int = 2048,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Forward pass with online logsumexp.
-
-    Uses W.T directly - cuBLAS handles transpose efficiently via transB flag.
-    """
-    N, D = h.shape
-    V = W.shape[0]
-    device = h.device
-
-    h_fp16 = h.half() if h.dtype != torch.float16 else h
-
-    valid_mask = (labels != ignore_index)
-
-    # FP32 accumulators for numerical stability
-    running_max = torch.full((N,), -float('inf'), dtype=torch.float32, device=device)
-    running_sum = torch.zeros(N, dtype=torch.float32, device=device)
-    label_logits = torch.zeros(N, dtype=torch.float32, device=device)
-
-    safe_labels = labels.clamp(min=0)
-    label_chunks = safe_labels // V_CHUNK
-    label_local_idx = safe_labels % V_CHUNK
-
-    num_chunks = (V + V_CHUNK - 1) // V_CHUNK
-
-    for chunk_idx in range(num_chunks):
-        v_start = chunk_idx * V_CHUNK
-        v_end = min(v_start + V_CHUNK, V)
-
-        # Slice rows of W, then transpose for GEMM
-        # W[v_start:v_end] is [V_chunk, D] contiguous
-        # .T gives [D, V_chunk] view - cuBLAS handles this efficiently
-        W_chunk = W[v_start:v_end]  # [V_chunk, D]
-
-        # FP16 GEMM: [N, D] @ [D, V_chunk] -> [N, V_chunk]
-        logits_chunk = torch.mm(h_fp16, W_chunk.T)
-        logits_f32 = logits_chunk.float()
-
-        # Online LSE update
-        chunk_max = logits_f32.max(dim=1).values
-        new_max = torch.maximum(running_max, chunk_max)
-        old_scale = torch.exp(running_max - new_max)
-        new_contrib = torch.exp(logits_f32 - new_max.unsqueeze(1)).sum(dim=1)
-        running_sum = old_scale * running_sum + new_contrib
-        running_max = new_max
-
-        # Extract label logits
-        labels_in_chunk = (label_chunks == chunk_idx) & valid_mask
-        if labels_in_chunk.any():
-            row_idx = torch.where(labels_in_chunk)[0]
-            col_idx = label_local_idx[labels_in_chunk]
-            label_logits[labels_in_chunk] = logits_f32[row_idx, col_idx]
-
-    lse = running_max + torch.log(running_sum)
-
-    loss_weights_f32 = loss_weights.float()
-    valid_weights = loss_weights_f32 * valid_mask.float()
-    weight_sum = valid_weights.sum()
-
-    per_token_loss = valid_weights * (-label_logits + lse)
-    loss = per_token_loss.sum() / weight_sum.clamp(min=1e-8)
-
-    return loss, lse, weight_sum, valid_mask
-
-
-def chunked_ce_backward(
-    h: torch.Tensor,            # [N, D]
-    W: torch.Tensor,            # [V, D] (NOT transposed)
-    labels: torch.Tensor,       # [N]
-    loss_weights: torch.Tensor, # [N]
-    lse: torch.Tensor,          # [N]
-    weight_sum: torch.Tensor,   # scalar
-    valid_mask: torch.Tensor,   # [N]
-    trainable_start_idx: int,
-    ignore_index: int = -100,
-    V_CHUNK: int = 2048,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Backward pass with FP16 accumulation.
-    """
-    N, D = h.shape
-    V = W.shape[0]
-    V_t = V - trainable_start_idx
-    device = h.device
-
-    h_fp16 = h.half() if h.dtype != torch.float16 else h
-
-    loss_weights_f32 = loss_weights.float() * valid_mask.float()
-    norm_weights = loss_weights_f32 / weight_sum.float().clamp(min=1e-8)
-
-    grad_h = torch.zeros(N, D, dtype=torch.float16, device=device)
-    grad_W_trainable = torch.zeros(V_t, D, dtype=torch.float16, device=device)
-
-    safe_labels = labels.clamp(min=0)
-    label_chunks = safe_labels // V_CHUNK
-    label_local_idx = safe_labels % V_CHUNK
-
-    num_chunks = (V + V_CHUNK - 1) // V_CHUNK
-
-    for chunk_idx in range(num_chunks):
-        v_start = chunk_idx * V_CHUNK
-        v_end = min(v_start + V_CHUNK, V)
-        V_chunk_size = v_end - v_start
-
-        W_chunk = W[v_start:v_end]  # [V_chunk, D]
-
-        # Recompute logits
-        logits_chunk = torch.mm(h_fp16, W_chunk.T)
-
-        # Softmax from saved LSE
-        softmax_chunk = torch.exp(logits_chunk.float() - lse.unsqueeze(1))
-        grad_logits = norm_weights.unsqueeze(1) * softmax_chunk
-
-        # Subtract at label positions
-        labels_in_chunk = (label_chunks == chunk_idx) & valid_mask
-        if labels_in_chunk.any():
-            row_idx = torch.where(labels_in_chunk)[0]
-            col_idx = label_local_idx[labels_in_chunk]
-            grad_logits[row_idx, col_idx] -= norm_weights[labels_in_chunk]
-
-        grad_logits_fp16 = grad_logits.half()
-
-        # grad_h += grad_logits @ W_chunk
-        # [N, V_chunk] @ [V_chunk, D] -> [N, D]
-        grad_h = torch.addmm(grad_h, grad_logits_fp16, W_chunk)
-
-        # grad_W for trainable portion
-        if v_end > trainable_start_idx:
-            train_start_local = max(0, trainable_start_idx - v_start)
-            train_end_local = V_chunk_size
-
-            train_start_global = max(0, v_start - trainable_start_idx)
-            train_end_global = train_start_global + (train_end_local - train_start_local)
-
-            grad_logits_trainable = grad_logits_fp16[:, train_start_local:train_end_local]
-
-            # [V_chunk_t, N] @ [N, D] -> [V_chunk_t, D]
-            grad_W_trainable[train_start_global:train_end_global] = torch.addmm(
-                grad_W_trainable[train_start_global:train_end_global],
-                grad_logits_trainable.T,
-                h_fp16
-            )
-
-    return grad_h, grad_W_trainable
-
-
-# =============================================================================
-# AUTOGRAD FUNCTION
-# =============================================================================
+# ===================
+# LM HEAD FUNCTION
+# ===================
 
 class FusedSparseCEFunction(torch.autograd.Function):
     @staticmethod
     def forward(
-        ctx,
-        h: torch.Tensor,
-        W: torch.Tensor,              # [V, D] - NOT transposed
-        trainable_buffer: torch.Tensor,
-        labels: torch.Tensor,
-        loss_weights: torch.Tensor,
-        trainable_start_idx: int,
-        ignore_index: int,
-        V_CHUNK: int,
+        ctx,                            # context object
+        h: torch.Tensor,                # [N, D] - hidden states
+        W: torch.Tensor,                # [V, D] - NOT transposed
+        trainable_buffer: torch.Tensor, # [V_t, D] - trainable buffer
+        labels: torch.Tensor,           # [N] - target indices
+        loss_weights: torch.Tensor,     # [N] - per-token weights
+        trainable_start_idx: int,       # index of the first trainable token
+        V_CHUNK: int,                   # chunk size for the weight matrix
     ) -> torch.Tensor:
 
-        loss, lse, weight_sum, valid_mask = chunked_ce_forward(
-            h, W, labels, loss_weights, ignore_index, V_CHUNK
+        loss, lse, weight_sum = chunked_ce_forward(
+            h, W, labels, loss_weights, V_CHUNK
         )
 
         weight_sum_t = weight_sum.clone() if isinstance(weight_sum, torch.Tensor) else torch.tensor(weight_sum, device=h.device)
 
-        ctx.save_for_backward(h, W, labels, loss_weights, lse, weight_sum_t, valid_mask)
+        ctx.save_for_backward(h, W, labels, loss_weights, lse, weight_sum_t)
         ctx.trainable_start_idx = trainable_start_idx
-        ctx.ignore_index = ignore_index
         ctx.V_CHUNK = V_CHUNK
 
         return loss
 
     @staticmethod
     def backward(ctx, grad_output):
-        h, W, labels, loss_weights, lse, weight_sum_t, valid_mask = ctx.saved_tensors
+        """
+        Backward pass with FP16 accumulation.
+        """
+        h, W, labels, loss_weights, lse, weight_sum_t = ctx.saved_tensors
 
         grad_h, grad_W_trainable = chunked_ce_backward(
-            h, W, labels, loss_weights, lse, weight_sum_t, valid_mask,
-            ctx.trainable_start_idx, ctx.ignore_index, ctx.V_CHUNK
+            h, W, labels, loss_weights, lse, weight_sum_t,
+            ctx.trainable_start_idx, ctx.V_CHUNK
         )
 
         grad_h = grad_h * grad_output
@@ -219,9 +63,9 @@ class FusedSparseCEFunction(torch.autograd.Function):
         return grad_h, None, grad_W_trainable, None, None, None, None, None
 
 
-# =============================================================================
-# SPARSE TIED WEIGHTS (Compatible with existing code)
-# =============================================================================
+# ======================
+# SPARSE TIED WEIGHTS
+# ======================
 
 class SparseTiedWeights(nn.Module):
     """
@@ -244,9 +88,7 @@ class SparseTiedWeights(nn.Module):
             self.weight[self.trainable_start_idx:] = self.trainable_buffer.to(self.weight.dtype)
 
 
-# =============================================================================
-# FUSED LM HEAD MODULE
-# =============================================================================
+
 
 class FusedSparseLMHead(nn.Module):
     """
@@ -260,12 +102,10 @@ class FusedSparseLMHead(nn.Module):
         self,
         tied_weights: SparseTiedWeights,
         v_chunk: int = 2048,
-        ignore_index: int = -100,
     ):
         super().__init__()
         self.tied_weights = tied_weights
         self.v_chunk = v_chunk
-        self.ignore_index = ignore_index
 
     @property
     def weight(self):
@@ -307,7 +147,6 @@ class FusedSparseLMHead(nn.Module):
             labels_flat,
             weights_flat,
             self.tied_weights.trainable_start_idx,
-            self.ignore_index,
             self.v_chunk,
         )
 
@@ -320,6 +159,12 @@ class FusedSparseLMHead(nn.Module):
         """
         return hidden_states @ self.tied_weights.weight.T
 
+
+
+
+# ===================
+# SPARSE EMBEDDING FUNCTION
+# ===================
 
 class SparseEmbeddingFunction(torch.autograd.Function):
     @staticmethod
@@ -404,7 +249,6 @@ def apply_trainable_embeddings(
     new_lm_head = FusedSparseLMHead(
         new_lm_head_weights,
         v_chunk=v_chunk,
-        ignore_index=-100
     )
 
     # Patch model

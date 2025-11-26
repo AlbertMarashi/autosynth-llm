@@ -45,6 +45,7 @@ class ThreadDataset(Dataset):
                 current_loss_score = 1.0
             elif token_id == self.tok_name_to_id["CONTEXT_TOKEN"]:
                 current_loss_score = 0.5
+                loss_mask[i] = 1.0 # ctx token LSON formatting should be less important
             elif token_id == self.tok_name_to_id["PLATFORM_TOKEN"]:
                 current_loss_score = 0.5
         return loss_mask
