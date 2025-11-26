@@ -35,6 +35,8 @@ class ThreadDataset(Dataset):
             if token_id not in self.tok_id_to_name:
                 loss_mask[i] = current_loss_score
                 continue
+            # Special tokens are 2x more important than other tokens
+            loss_mask[i] = 2.0
             if token_id == self.tok_name_to_id["MODEL_TOKEN"]:
                 current_loss_score = 2.0
             elif token_id == self.tok_name_to_id["DEVELOPER_TOKEN"]:
