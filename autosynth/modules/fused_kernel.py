@@ -5,8 +5,6 @@ Recomputes label indices in backward (matching original structure).
 """
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from typing import Tuple
 
 def chunked_ce_forward(

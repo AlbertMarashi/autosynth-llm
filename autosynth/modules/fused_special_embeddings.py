@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 from typing import Optional, List
 from transformers.models.auto import AutoModelForCausalLM, AutoTokenizer
-from fused_kernel import chunked_ce_forward, chunked_ce_backward
+from autosynth.modules.fused_kernel import chunked_ce_forward, chunked_ce_backward
 
 # ===================
 # LM HEAD FUNCTION

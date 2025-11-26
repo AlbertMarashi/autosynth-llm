@@ -3,8 +3,6 @@ from torch import nn
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-
-
 class SparseTiedWeights(nn.Module):
     def __init__(self, weights, trainable_start_idx):
         """
