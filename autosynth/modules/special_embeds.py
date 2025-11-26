@@ -3,8 +3,6 @@ from torch import nn
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# Tell unsloth to use our own custom lm head code by setting it to equal 1
-# os.environ["UNSLOTH_RETURN_LOGITS"] = "1"
 
 
 class SparseTiedWeights(nn.Module):
@@ -180,9 +178,9 @@ class SparseLMHeadFunction(torch.autograd.Function):
 
         grad_buffer = (
             trainable_grads.permute(2, 0, 1)  # Shape: (num_trainable_tokens, batch_size, seq_length)
-            .reshape(trainable_grads.size(-1), -1)  # Shape: (num_trainable_tokens, batch_size * seq_length)
+                .reshape(trainable_grads.size(-1), -1)  # (V_t, B*S) - no copy, just view
             @ x.reshape(-1, x.size(-1))  # Shape: (batch_size * seq_length, embedding_dim)
-        )  # Shape: (num_trainable_tokens, embedding_dim)
+        )  # Shape: (num_trainable_tokens, embedding_dim) ← Only storing gradients for trainable tokens!
 
         return grad_buffer, grad_input_x, None
 
@@ -226,7 +224,12 @@ class SparseLMHead(nn.Module):
 
 
 
-def apply_trainable_embeddings(model: AutoModelForCausalLM, tokenizer: AutoTokenizer, new_tokens: List[str], tie_weights: bool = False):
+def apply_trainable_embeddings(
+    model: AutoModelForCausalLM,
+    tokenizer: AutoTokenizer,
+    new_tokens: List[str],
+    tie_weights: bool = False,
+):
     orig_emb = model.base_model.model.model.embed_tokens
     orig_lm_head = model.base_model.model.lm_head
 
@@ -269,3 +272,5 @@ def apply_trainable_embeddings(model: AutoModelForCausalLM, tokenizer: AutoToken
 # # Replace the existing model's embedding and LM head layers with the sparse ones
 # model.base_model.model.model.embed_tokens = new_emb
 # model.base_model.model.lm_head = new_lm_head
+
+

@@ -30,7 +30,6 @@ class ThreadDataset(Dataset):
     def _generate_loss_mask(self, tokens_ids: List[int]) -> torch.Tensor:
         loss_mask = [1.0] * len(tokens_ids)
         current_loss_score = 1.0
-        last_special_token = None
 
         for i, token_id in enumerate(tokens_ids):
             if token_id not in self.tok_id_to_name:
